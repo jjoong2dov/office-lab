@@ -35,6 +35,7 @@ npm run check               # 확인 스크립트. 전부 통과하면 맞게 �
 | 1 | 부서 게시판: 다른 부서 글은 목록에도, 직접 주소로도 안 보인다 | `prompts/ep01.md` | `checks/ep01-board.test.js` |
 | 2 | 부서 이동: 지난 글에는 쓴 당시의 소속이 남는다 | `prompts/ep02.md` | `checks/ep02-transfer.test.js` |
 | 3 | 퇴사 처리: 열린 로그인까지 끊고, 작성 기록은 남긴다 | `prompts/ep03.md` | `checks/ep03-offboard.test.js` |
+| 4 | 관리 화면: 시스템 관리자와 문서 열람 권한을 나눈다 | `prompts/ep04.md` | `checks/ep04-admin.test.js` |
 
 ## 구조
 
