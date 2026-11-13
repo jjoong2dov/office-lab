@@ -39,6 +39,7 @@ npm run check               # 확인 스크립트. 전부 통과하면 맞게 �
 | 4 | 관리 화면: 시스템 관리자와 문서 열람 권한을 나눈다 | `prompts/ep04.md` | `checks/ep04-admin.test.js` |
 | 5 | 첨부와 내보내기: 글을 볼 수 없으면 파일도 받을 수 없다 | `prompts/ep05.md` | `checks/ep05-files.test.js` |
 | 6 | 열람·변경 기록: 거부된 시도까지 남기고, 내용은 남기지 않는다 | `prompts/ep06.md` | `checks/ep06-audit.test.js` |
+| 7 | 백업과 복원: 다른 DB 에 복원하고 원본과 대조한다 | `prompts/ep07.md` | `checks/ep07-backup.test.js` |
 
 ## 구조
 
