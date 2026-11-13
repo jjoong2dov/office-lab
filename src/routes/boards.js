@@ -11,6 +11,8 @@ const BODY_MAX = 20000;
 const parseId = (v) => (/^\d{1,15}$/.test(String(v)) ? Number(v) : null);
 // 글자 수는 DB 의 char_length 와 같게 센다.
 const len = (s) => [...s].length;
+// 작성자 이름 옆에 붙이는 딱지. 퇴사한 사람의 글도 그대로 보여 주되 퇴사했음을 표시한다.
+const leftTag = (status) => (status === 'left' ? ' <span class="tag gray">퇴사</span>' : '');
 
 export function boardRoutes(pool) {
   const r = express.Router();
@@ -47,7 +49,7 @@ ${boards.map((b) => `<tr><td><a href="/boards/${b.id}">${esc(b.name)}</a></td>
     const board = await findBoard(req.user, req.params.id);
     if (!board) return notFound(req, res);
     const { rows } = await pool.query(
-      `SELECT p.id, p.title, p.created_at, u.display_name, p.author_title, p.author_department_name
+      `SELECT p.id, p.title, p.created_at, u.display_name, u.status AS author_status, p.author_title, p.author_department_name
          FROM posts p JOIN users u ON u.id = p.author_id
         WHERE p.board_id = $1
         ORDER BY p.created_at DESC, p.id DESC`, [board.id]);
@@ -55,7 +57,7 @@ ${boards.map((b) => `<tr><td><a href="/boards/${b.id}">${esc(b.name)}</a></td>
       title: board.name, active: 'boards',
       body: `<div class="bar"><h1>${esc(board.name)}</h1><a class="btn" href="/boards/${board.id}/new">글쓰기</a></div>
 ${rows.length ? `<table><thead><tr><th>제목</th><th>작성자</th><th>소속</th><th>날짜</th></tr></thead><tbody>
-${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>${esc(p.display_name)} ${esc(p.author_title)}</td>
+${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>${esc(p.display_name)} ${esc(p.author_title)}${leftTag(p.author_status)}</td>
 <td>${esc(p.author_department_name)}</td><td class="meta">${esc(fmtDate(p.created_at))}</td></tr>`).join('\n')}
 </tbody></table>` : '<div class="card"><p class="meta">아직 글이 없습니다.</p></div>'}
 <p><a href="/boards">← 게시판 목록</a></p>`,
@@ -95,7 +97,7 @@ ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>
     const id = parseId(req.params.id);
     if (id === null) return notFound(req, res);
     const { rows } = await pool.query(
-      `SELECT p.id, p.title, p.body, p.created_at, u.display_name, p.author_title,
+      `SELECT p.id, p.title, p.body, p.created_at, u.display_name, u.status AS author_status, p.author_title,
               p.author_department_name, b.id AS board_id, b.name AS board_name, b.department_id
          FROM posts p JOIN boards b ON b.id = p.board_id
          JOIN users u ON u.id = p.author_id
@@ -106,7 +108,7 @@ ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>
       title: p.title, active: 'boards',
       body: `<p class="meta"><a href="/boards/${p.board_id}">${esc(p.board_name)}</a></p>
 <h1>${esc(p.title)}</h1>
-<p class="meta">${esc(p.display_name)} ${esc(p.author_title)} · <span class="tag">${esc(p.author_department_name)}</span> · ${esc(fmtDate(p.created_at))}</p>
+<p class="meta">${esc(p.display_name)} ${esc(p.author_title)}${leftTag(p.author_status)} · <span class="tag">${esc(p.author_department_name)}</span> · ${esc(fmtDate(p.created_at))}</p>
 <div class="card post-body">${esc(p.body)}</div>
 <p><a class="btn ghost" href="/boards/${p.board_id}">목록으로</a></p>`,
     }));

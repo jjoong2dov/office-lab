@@ -12,8 +12,9 @@ export function homeRoutes(pool) {
 
   r.post('/login', async (req, res) => {
     const { username = '', password = '' } = req.body || {};
-    const { rows } = await pool.query('SELECT id, password_hash FROM users WHERE username = $1', [username]);
-    const ok = rows[0] && await verifyPassword(password, rows[0].password_hash);
+    const { rows } = await pool.query('SELECT id, password_hash, status FROM users WHERE username = $1', [username]);
+    // 퇴사한 사람은 비밀번호가 맞아도 들여보내지 않는다. 응답은 비밀번호가 틀렸을 때와 같다 (퇴사 여부를 알려 주지 않는다).
+    const ok = rows[0] && await verifyPassword(password, rows[0].password_hash) && rows[0].status === 'active';
     if (!ok) return res.status(401).send(loginPage(req, '아이디 또는 비밀번호가 맞지 않습니다.', username));
     await createSession(pool, res, rows[0].id);
     res.redirect('/');

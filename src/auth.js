@@ -46,6 +46,7 @@ export async function destroySession(pool, req, res) {
 }
 
 // 요청마다 쿠키 → 세션 → 사용자를 DB 에서 다시 읽는다.
+// 퇴사한 사람(status 가 active 가 아님)은 세션 행이 남아 있어도 로그인한 사람으로 취급하지 않는다.
 export function loadUser(pool) {
   return async (req, res, next) => {
     req.user = null;
@@ -58,7 +59,7 @@ export function loadUser(pool) {
            FROM sessions s
            JOIN users u ON u.id = s.user_id
            JOIN departments d ON d.id = u.department_id
-          WHERE s.token_hash = $1 AND s.expires_at > now()`,
+          WHERE s.token_hash = $1 AND s.expires_at > now() AND u.status = 'active'`,
         [sha256(token)],
       );
       if (rows[0]) {
