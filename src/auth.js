@@ -83,10 +83,22 @@ export function requireLogin(req, res, next) {
   next();
 }
 
+export const CSRF_MESSAGE = '요청을 확인할 수 없습니다. 화면을 새로 고친 뒤 다시 시도하세요.';
+
+// 요청에 실려 온 토큰이 세션의 토큰과 같은가.
+export function csrfOk(req) {
+  const sent = req.body?._csrf || req.headers['x-csrf-token'];
+  return Boolean(sent && req.csrf && sent === req.csrf);
+}
+
+export const isMultipart = (req) => /^multipart\//i.test(req.headers['content-type'] || '');
+
 // 로그인한 사용자의 POST 는 화면에 심어 둔 토큰이 같이 와야 한다.
+// multipart 요청은 본문을 읽기 전에는 _csrf 를 알 수 없어서 여기서는 건너뛴다.
+// 건너뛴 요청은 그 경로가 본문을 읽은 뒤에 csrfOk() 로 같은 검사를 해야 한다 (app.js 가 그런 경로만 통과시킨다).
 export function checkCsrf(req, res, next) {
   if (req.method !== 'POST' || !req.user) return next();
-  const sent = req.body?._csrf || req.headers['x-csrf-token'];
-  if (!sent || sent !== req.csrf) return res.status(403).send('요청을 확인할 수 없습니다. 화면을 새로 고친 뒤 다시 시도하세요.');
+  if (isMultipart(req)) return next();
+  if (!csrfOk(req)) return res.status(403).send(CSRF_MESSAGE);
   next();
 }

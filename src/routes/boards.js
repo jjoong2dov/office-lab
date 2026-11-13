@@ -1,8 +1,9 @@
-// 부서 게시판. 다섯 경로 모두 서버에서 canReadBoard() 를 거친다.
+// 부서 게시판. 여섯 경로 모두 서버에서 canReadBoard() 를 거친다. (첨부 올리기·내려받기는 routes/files.js)
 import express from 'express';
 import { requireLogin } from '../auth.js';
-import { canReadBoard } from '../policy.js';
-import { layout, esc, fmtDate, csrfField, notFound } from '../views.js';
+import { canReadBoard, canAttachToPost } from '../policy.js';
+import { layout, esc, fmtDate, fmtSize, csrfField, notFound } from '../views.js';
+import { contentDisposition, FILE_MAX_BYTES } from './files.js';
 
 const TITLE_MAX = 200;
 const BODY_MAX = 20000;
@@ -13,6 +14,14 @@ const parseId = (v) => (/^\d{1,15}$/.test(String(v)) ? Number(v) : null);
 const len = (s) => [...s].length;
 // 작성자 이름 옆에 붙이는 딱지. 퇴사한 사람의 글도 그대로 보여 주되 퇴사했음을 표시한다.
 const leftTag = (status) => (status === 'left' ? ' <span class="tag gray">퇴사</span>' : '');
+
+// CSV 한 칸. 엑셀에서 수식으로 읽히지 않게 =, +, -, @ 로 시작하는 값은 앞에 ' 를 붙이고,
+// 쉼표·따옴표·줄바꿈이 있으면 큰따옴표로 감싼다.
+function csvCell(v) {
+  let s = String(v ?? '');
+  if (/^[=+\-@]/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
 
 export function boardRoutes(pool) {
   const r = express.Router();
@@ -55,13 +64,35 @@ ${boards.map((b) => `<tr><td><a href="/boards/${b.id}">${esc(b.name)}</a></td>
         ORDER BY p.created_at DESC, p.id DESC`, [board.id]);
     res.send(layout(req, {
       title: board.name, active: 'boards',
-      body: `<div class="bar"><h1>${esc(board.name)}</h1><a class="btn" href="/boards/${board.id}/new">글쓰기</a></div>
+      body: `<div class="bar"><h1>${esc(board.name)}</h1><div class="row"><a class="btn ghost" href="/boards/${board.id}/export.csv">CSV 내보내기</a><a class="btn" href="/boards/${board.id}/new">글쓰기</a></div></div>
 ${rows.length ? `<table><thead><tr><th>제목</th><th>작성자</th><th>소속</th><th>날짜</th></tr></thead><tbody>
 ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>${esc(p.display_name)} ${esc(p.author_title)}${leftTag(p.author_status)}</td>
 <td>${esc(p.author_department_name)}</td><td class="meta">${esc(fmtDate(p.created_at))}</td></tr>`).join('\n')}
 </tbody></table>` : '<div class="card"><p class="meta">아직 글이 없습니다.</p></div>'}
 <p><a href="/boards">← 게시판 목록</a></p>`,
     }));
+  });
+
+  // 글 목록을 CSV 로 내보낸다. 목록 화면과 같은 권한(findBoard)을 거친다 — 볼 수 없는 게시판은 404.
+  // 날짜는 DB 에서 한국 시간 글자로 받는다. 맨 앞의 BOM 은 엑셀이 한글을 UTF-8 로 읽게 한다.
+  r.get('/boards/:id/export.csv', requireLogin, async (req, res) => {
+    const board = await findBoard(req.user, req.params.id);
+    if (!board) return notFound(req, res);
+    const { rows } = await pool.query(
+      `SELECT p.id, p.title, u.display_name, p.author_title, p.author_department_name,
+              to_char(p.created_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI') AS created_at
+         FROM posts p JOIN users u ON u.id = p.author_id
+        WHERE p.board_id = $1
+        ORDER BY p.created_at DESC, p.id DESC`, [board.id]);
+    const lines = [['번호', '제목', '작성자', '소속', '날짜'],
+      ...rows.map((p) => [p.id, p.title, `${p.display_name} ${p.author_title}`.trim(), p.author_department_name, p.created_at])];
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': contentDisposition(`${board.name}.csv`),
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'private, no-store',
+    });
+    res.send(`\ufeff${lines.map((l) => l.map(csvCell).join(',')).join('\r\n')}\r\n`);
   });
 
   // 글쓰기 화면
@@ -97,19 +128,34 @@ ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>
     const id = parseId(req.params.id);
     if (id === null) return notFound(req, res);
     const { rows } = await pool.query(
-      `SELECT p.id, p.title, p.body, p.created_at, u.display_name, u.status AS author_status, p.author_title,
+      `SELECT p.id, p.author_id, p.title, p.body, p.created_at, u.display_name, u.status AS author_status, p.author_title,
               p.author_department_name, b.id AS board_id, b.name AS board_name, b.department_id
          FROM posts p JOIN boards b ON b.id = p.board_id
          JOIN users u ON u.id = p.author_id
         WHERE p.id = $1`, [id]);
     const p = rows[0];
     if (!p || !canReadBoard(req.user, { id: p.board_id, department_id: p.department_id })) return notFound(req, res);
+    // 첨부 목록. 내려받기 주소는 첨부 번호로만 만든다 (저장 이름은 화면에 내보내지 않는다).
+    const { rows: files } = await pool.query(
+      'SELECT id, original_name, size_bytes FROM attachments WHERE post_id = $1 ORDER BY id', [p.id]);
     res.send(layout(req, {
       title: p.title, active: 'boards',
       body: `<p class="meta"><a href="/boards/${p.board_id}">${esc(p.board_name)}</a></p>
 <h1>${esc(p.title)}</h1>
 <p class="meta">${esc(p.display_name)} ${esc(p.author_title)}${leftTag(p.author_status)} · <span class="tag">${esc(p.author_department_name)}</span> · ${esc(fmtDate(p.created_at))}</p>
 <div class="card post-body">${esc(p.body)}</div>
+<div class="card"><h2>첨부 파일</h2>
+${files.length ? `<table><thead><tr><th>이름</th><th>크기</th><th>내려받기</th></tr></thead><tbody>
+${files.map((f) => `<tr><td>${esc(f.original_name)}</td><td class="meta">${esc(fmtSize(f.size_bytes))}</td>
+<td><a href="/attachments/${f.id}/download">내려받기</a></td></tr>`).join('\n')}
+</tbody></table>` : '<p class="meta">첨부 파일이 없습니다.</p>'}
+${canAttachToPost(req.user, p) ? `<form method="post" action="/posts/${p.id}/attachments" enctype="multipart/form-data">
+${csrfField(req)}
+<label>파일 올리기 <input type="file" name="file" required></label>
+<p class="hint">한 번에 파일 하나, ${FILE_MAX_BYTES / 1024 / 1024}MB 까지 올릴 수 있습니다.</p>
+<div class="row"><button class="primary">올리기</button></div>
+</form>` : ''}
+</div>
 <p><a class="btn ghost" href="/boards/${p.board_id}">목록으로</a></p>`,
     }));
   });

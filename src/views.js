@@ -8,6 +8,14 @@ export const fmtDate = (d) => new Date(d).toLocaleString('ko-KR', {
   timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
 });
 
+// 파일 크기를 읽기 쉽게 (B, KB, MB)
+export function fmtSize(bytes) {
+  const n = Number(bytes);
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export function layout(req, { title, active = '', body }) {
   const u = req.user;
   const menu = MENU.filter((m) => !m.visible || m.visible(u))

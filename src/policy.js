@@ -9,6 +9,13 @@ export function canReadBoard(user, board) {
   return Number(board.department_id) === Number(user.departmentId);
 }
 
+// 글에 파일을 붙일 수 있는가. 글쓴이만 true.
+// 글을 볼 수 있는지는 따로 canReadBoard 로 먼저 본다 (부서를 옮긴 글쓴이는 거기서 막힌다).
+export function canAttachToPost(user, post) {
+  if (!user || !post) return false;
+  return Number(post.author_id) === Number(user.id);
+}
+
 // 계정·조직을 관리할 수 있는가 (관리 화면: 부서 이동, 퇴사 처리).
 // roles 에 system_admin 이 있을 때만 true. 이 역할이 주는 것은 이것 하나뿐이다 — 게시판 열람은 위의 canReadBoard 가 따로 정한다.
 export function canManageUsers(user) {

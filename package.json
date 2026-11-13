@@ -5,7 +5,9 @@
   "description": "가상 회사 '예제상사'의 사내 시스템 예제 — 영상 시리즈 'AI로 사내 시스템 만들기' 실습 코드",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/seed.js",
@@ -15,6 +17,7 @@
   },
   "dependencies": {
     "express": "^5.1.0",
+    "multer": "^2.5.0",
     "pg": "^8.13.0"
   }
 }
