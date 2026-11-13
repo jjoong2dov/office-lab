@@ -27,3 +27,24 @@ export function canManageUsers(user) {
 export function canReadAudit(user) {
   return Boolean(user && Array.isArray(user.roles) && user.roles.includes('auditor'));
 }
+
+// 승인 요청을 볼 수 있는가. 올린 사람과 승인자 두 사람만 true.
+// 같은 부서도, 시스템 관리자도, 감사 담당도 볼 수 없다 (역할을 보지 않는다).
+export function canReadRequest(user, request) {
+  if (!user || !request) return false;
+  const me = Number(user.id);
+  return me === Number(request.requester_id) || me === Number(request.approver_id);
+}
+
+// 승인·반려할 수 있는가. 승인자만 true. 요청의 상태(대기 중인지)는 여기서 보지 않는다 — 경로가 DB 의 조건으로 막는다.
+// requester_id <> approver_id 는 DB 가 막지만, 자기 요청을 자기가 처리하는 길은 여기서도 한 번 더 막는다.
+export function canDecideRequest(user, request) {
+  if (!user || !request) return false;
+  return Number(user.id) === Number(request.approver_id) && Number(user.id) !== Number(request.requester_id);
+}
+
+// 취소할 수 있는가. 올린 사람만 true. 승인자가 퇴사했어도 올린 사람은 취소할 수 있다.
+export function canCancelRequest(user, request) {
+  if (!user || !request) return false;
+  return Number(user.id) === Number(request.requester_id);
+}

@@ -5,6 +5,7 @@ import { canManageUsers, canReadAudit } from './policy.js';
 export const MENU = [
   { key: 'home', label: '홈', href: '/' },
   { key: 'boards', label: '게시판', href: '/boards' },
+  { key: 'requests', label: '승인 요청', href: '/requests' },
   { key: 'admin', label: '관리', href: '/admin/users', visible: canManageUsers },
   { key: 'audit', label: '기록', href: '/audit', visible: canReadAudit },
 ];

@@ -35,6 +35,13 @@ export const POSTS = [
   ['경영지원팀 게시판', 'choi', '경비 정산 마감일', '매달 25일까지 영수증을 올려 주세요.'],
 ];
 
+// 승인 요청: 올린 사람, 승인자, 제목, 본문, 상태, 처리 의견
+export const REQUESTS = [
+  ['lee', 'kim', '거래처 방문 차량 이용', '다음 주 화요일 오전, 거래처 두 곳 방문에 회사 차량을 쓰려고 합니다.', 'pending', null],
+  ['jung', 'park', '개발 서적 구입', '사내 스터디용 데이터베이스 책 두 권을 사려고 합니다.', 'approved', '좋습니다. 영수증은 경영지원팀에 내 주세요.'],
+  ['han', 'choi', '사무용 의자 교체', '의자 등받이가 부러져 교체를 요청합니다.', 'pending', null],
+];
+
 export async function seed(pool) {
   const hash = await hashPassword(PASSWORD);
   for (const name of DEPARTMENTS) {
@@ -80,6 +87,21 @@ export async function seed(pool) {
            FROM users u JOIN departments d ON d.id = u.department_id
           WHERE u.username = $2`,
         [board, username, title, body],
+      );
+    }
+  }
+  // 승인 요청: 하나도 없을 때만 넣는다. 올린 사람의 소속·직급은 넣는 순간의 값을 남긴다.
+  const { rows: reqs } = await pool.query('SELECT count(*) AS n FROM requests');
+  if (Number(reqs[0].n) === 0) {
+    for (const [requester, approver, title, body, status, note] of REQUESTS) {
+      await pool.query(
+        `INSERT INTO requests(requester_id, approver_id, title, body, requester_department_name, requester_title,
+                              status, decision_note, decided_at)
+         SELECT u.id, (SELECT id FROM users WHERE username = $2), $3, $4, d.name, u.title,
+                $5, $6, CASE WHEN $5 = 'pending' THEN NULL ELSE now() END
+           FROM users u JOIN departments d ON d.id = u.department_id
+          WHERE u.username = $1`,
+        [requester, approver, title, body, status, note],
       );
     }
   }
