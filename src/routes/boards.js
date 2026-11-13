@@ -42,21 +42,21 @@ ${boards.map((b) => `<tr><td><a href="/boards/${b.id}">${esc(b.name)}</a></td>
     }));
   });
 
-  // 글 목록
+  // 글 목록. 작성자 소속·직급은 글에 남긴 값(쓴 당시)으로 보여 준다.
   r.get('/boards/:id', requireLogin, async (req, res) => {
     const board = await findBoard(req.user, req.params.id);
     if (!board) return notFound(req, res);
     const { rows } = await pool.query(
-      `SELECT p.id, p.title, p.created_at, u.display_name, d.name AS department_name
-         FROM posts p JOIN users u ON u.id = p.author_id JOIN departments d ON d.id = u.department_id
+      `SELECT p.id, p.title, p.created_at, u.display_name, p.author_title, p.author_department_name
+         FROM posts p JOIN users u ON u.id = p.author_id
         WHERE p.board_id = $1
         ORDER BY p.created_at DESC, p.id DESC`, [board.id]);
     res.send(layout(req, {
       title: board.name, active: 'boards',
       body: `<div class="bar"><h1>${esc(board.name)}</h1><a class="btn" href="/boards/${board.id}/new">글쓰기</a></div>
 ${rows.length ? `<table><thead><tr><th>제목</th><th>작성자</th><th>소속</th><th>날짜</th></tr></thead><tbody>
-${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>${esc(p.display_name)}</td>
-<td>${esc(p.department_name)}</td><td class="meta">${esc(fmtDate(p.created_at))}</td></tr>`).join('\n')}
+${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>${esc(p.display_name)} ${esc(p.author_title)}</td>
+<td>${esc(p.author_department_name)}</td><td class="meta">${esc(fmtDate(p.created_at))}</td></tr>`).join('\n')}
 </tbody></table>` : '<div class="card"><p class="meta">아직 글이 없습니다.</p></div>'}
 <p><a href="/boards">← 게시판 목록</a></p>`,
     }));
@@ -79,8 +79,13 @@ ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>
     if (len(title) < 1 || len(title) > TITLE_MAX) error = `제목은 1~${TITLE_MAX}자로 적어 주세요.`;
     else if (len(body) < 1 || len(body) > BODY_MAX) error = `본문은 1~${BODY_MAX}자로 적어 주세요.`;
     if (error) return res.status(400).send(writePage(req, board, { error, title, body }));
+    // 소속·직급은 저장하는 순간의 값을 글에 남긴다. 나중에 부서를 옮겨도 이 값은 바뀌지 않는다.
     const { rows } = await pool.query(
-      'INSERT INTO posts(board_id, author_id, title, body) VALUES ($1, $2, $3, $4) RETURNING id',
+      `INSERT INTO posts(board_id, author_id, title, body, author_department_name, author_title)
+       SELECT $1, u.id, $3, $4, d.name, u.title
+         FROM users u JOIN departments d ON d.id = u.department_id
+        WHERE u.id = $2
+       RETURNING id`,
       [board.id, req.user.id, title, body]);
     res.redirect(`/posts/${rows[0].id}`);
   });
@@ -90,10 +95,10 @@ ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>
     const id = parseId(req.params.id);
     if (id === null) return notFound(req, res);
     const { rows } = await pool.query(
-      `SELECT p.id, p.title, p.body, p.created_at, u.display_name, u.title AS author_title,
-              d.name AS department_name, b.id AS board_id, b.name AS board_name, b.department_id
+      `SELECT p.id, p.title, p.body, p.created_at, u.display_name, p.author_title,
+              p.author_department_name, b.id AS board_id, b.name AS board_name, b.department_id
          FROM posts p JOIN boards b ON b.id = p.board_id
-         JOIN users u ON u.id = p.author_id JOIN departments d ON d.id = u.department_id
+         JOIN users u ON u.id = p.author_id
         WHERE p.id = $1`, [id]);
     const p = rows[0];
     if (!p || !canReadBoard(req.user, { id: p.board_id, department_id: p.department_id })) return notFound(req, res);
@@ -101,7 +106,7 @@ ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>
       title: p.title, active: 'boards',
       body: `<p class="meta"><a href="/boards/${p.board_id}">${esc(p.board_name)}</a></p>
 <h1>${esc(p.title)}</h1>
-<p class="meta">${esc(p.display_name)} ${esc(p.author_title)} · <span class="tag">${esc(p.department_name)}</span> · ${esc(fmtDate(p.created_at))}</p>
+<p class="meta">${esc(p.display_name)} ${esc(p.author_title)} · <span class="tag">${esc(p.author_department_name)}</span> · ${esc(fmtDate(p.created_at))}</p>
 <div class="card post-body">${esc(p.body)}</div>
 <p><a class="btn ghost" href="/boards/${p.board_id}">목록으로</a></p>`,
     }));

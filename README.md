@@ -39,8 +39,8 @@ npm run check               # 확인 스크립트. 전부 통과하면 맞게 �
 
 ```
 migrations/   번호 붙은 SQL. 한 번씩만 적용된다
-scripts/      migrate, seed(가상 데이터), reset
-src/          app.js, auth.js(로그인·세션), policy.js(권한 판단), views.js(화면 틀), routes/
+scripts/      migrate, seed(가상 데이터), reset, transfer(부서 이동)
+src/          app.js, auth.js(로그인·세션), policy.js(권한 판단), org.js(소속 이력·부서 이동), views.js(화면 틀), routes/
 checks/       확인 스크립트 (node:test)
 prompts/      편마다 AI 에게 주는 지시문
 ```

@@ -33,10 +33,15 @@ export async function seed(pool) {
     await pool.query('INSERT INTO departments(name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [name]);
   }
   for (const [username, displayName, title, dept] of USERS) {
+    // 사용자를 새로 넣을 때만 소속 이력도 한 줄 넣는다 (시작일 = 계정 생성일, 열린 소속)
     await pool.query(
-      `INSERT INTO users(username, display_name, title, password_hash, department_id)
-       VALUES ($1, $2, $3, $4, (SELECT id FROM departments WHERE name = $5))
-       ON CONFLICT (username) DO NOTHING`,
+      `WITH u AS (
+         INSERT INTO users(username, display_name, title, password_hash, department_id)
+         VALUES ($1, $2, $3, $4, (SELECT id FROM departments WHERE name = $5))
+         ON CONFLICT (username) DO NOTHING
+         RETURNING id, department_id, title, created_at)
+       INSERT INTO org_assignments(user_id, department_id, title, starts_on)
+       SELECT id, department_id, title, created_at::date FROM u`,
       [username, displayName, title, hash, dept],
     );
   }
@@ -53,9 +58,12 @@ export async function seed(pool) {
   const { rows } = await pool.query('SELECT count(*) AS n FROM posts');
   if (Number(rows[0].n) === 0) {
     for (const [board, username, title, body] of POSTS) {
+      // 글에는 쓴 당시(= 넣는 순간)의 소속·직급을 같이 남긴다
       await pool.query(
-        `INSERT INTO posts(board_id, author_id, title, body)
-         VALUES ((SELECT id FROM boards WHERE name = $1), (SELECT id FROM users WHERE username = $2), $3, $4)`,
+        `INSERT INTO posts(board_id, author_id, title, body, author_department_name, author_title)
+         SELECT (SELECT id FROM boards WHERE name = $1), u.id, $3, $4, d.name, u.title
+           FROM users u JOIN departments d ON d.id = u.department_id
+          WHERE u.username = $2`,
         [board, username, title, body],
       );
     }
