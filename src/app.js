@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { loadUser, checkCsrf } from './auth.js';
 import { notFound } from './views.js';
 import { homeRoutes } from './routes/home.js';
+import { boardRoutes } from './routes/boards.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -16,6 +17,7 @@ export function createApp(pool) {
   app.use(checkCsrf);
 
   app.use(homeRoutes(pool));
+  app.use(boardRoutes(pool));
 
   app.use((req, res) => (req.user ? notFound(req, res) : res.redirect('/login')));
   app.use((err, req, res, next) => {   // eslint-disable-line no-unused-vars

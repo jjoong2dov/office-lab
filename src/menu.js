@@ -2,4 +2,5 @@
 // visible(user) 가 있으면 그 사용자에게 보일 때만 그린다. (메뉴를 숨기는 것은 편의일 뿐, 권한 검사는 각 경로가 따로 한다.)
 export const MENU = [
   { key: 'home', label: '홈', href: '/' },
+  { key: 'boards', label: '게시판', href: '/boards' },
 ];
