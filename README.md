@@ -33,6 +33,7 @@ npm run check               # 확인 스크립트. 전부 통과하면 맞게 �
 | 편 | 만드는 것 | 지시문 | 확인 |
 |---|---|---|---|
 | 1 | 부서 게시판: 다른 부서 글은 목록에도, 직접 주소로도 안 보인다 | `prompts/ep01.md` | `checks/ep01-board.test.js` |
+| 2 | 부서 이동: 지난 글에는 쓴 당시의 소속이 남는다 | `prompts/ep02.md` | `checks/ep02-transfer.test.js` |
 
 ## 구조
 
