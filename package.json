@@ -12,6 +12,9 @@
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/seed.js",
     "db:reset": "node scripts/reset.js",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js",
+    "verify-restore": "node scripts/verify-restore.js",
     "start": "node src/server.js",
     "check": "node --test --test-concurrency=1 \"checks/*.test.js\""
   },
