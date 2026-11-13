@@ -25,7 +25,7 @@ export function homeRoutes(pool) {
   });
 
   r.get('/', requireLogin, async (req, res) => {
-    // 소속 이력: 최근 것이 위로. 날짜는 DB 에서 글자로 받아 시간대에 흔들리지 않게 한다.
+    // 소속 이력: 최근 것이 위로. 종료일(ends_on)은 그 부서에 더는 속하지 않는 첫날이다. 날짜는 DB 에서 글자로 받아 시간대에 흔들리지 않게 한다.
     const { rows: history } = await pool.query(
       `SELECT d.name AS department_name, a.title,
               to_char(a.starts_on, 'YYYY-MM-DD') AS starts_on, to_char(a.ends_on, 'YYYY-MM-DD') AS ends_on
@@ -39,7 +39,7 @@ export function homeRoutes(pool) {
 <div class="card"><h2>내 정보</h2>
 <dl><dt>아이디</dt><dd>${esc(req.user.username)}</dd><dt>소속</dt><dd>${esc(req.user.departmentName)}</dd><dt>직급</dt><dd>${esc(req.user.title)}</dd></dl></div>
 <h2>소속 이력</h2>
-<table><thead><tr><th>부서</th><th>직급</th><th>시작일</th><th>종료일</th></tr></thead><tbody>
+<table><thead><tr><th>부서</th><th>직급</th><th>시작일</th><th>종료일 <small>(이날부터 다른 소속)</small></th></tr></thead><tbody>
 ${history.map((a) => `<tr><td>${esc(a.department_name)}</td><td>${esc(a.title)}</td><td>${esc(a.starts_on)}</td>
 <td>${a.ends_on === null ? '<span class="tag">현재</span>' : esc(a.ends_on)}</td></tr>`).join('\n')}
 </tbody></table>`,

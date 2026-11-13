@@ -1,4 +1,5 @@
 // 조직: 소속 이력(org_assignments)을 바꾸는 일은 이 파일에만 둔다.
+// 기간은 starts_on 부터 ends_on 전날까지다 (ends_on 당일은 포함하지 않는다). ends_on 이 NULL 이면 지금 소속이다.
 
 // 날짜는 'YYYY-MM-DD' 글자로 맞춘다. Date 를 받으면 그 날짜(로컬 기준)로 바꾼다.
 function toDay(v) {
@@ -11,7 +12,8 @@ function toDay(v) {
 }
 
 // 부서(또는 직급)를 옮긴다. 한 트랜잭션에서
-//   1) 열린 소속을 onDate 전날로 닫고  2) 새 소속을 onDate 부터 열고  3) users 의 지금 소속·직급을 바꾼다.
+//   1) 열린 소속을 ends_on = onDate 로 닫고  2) 새 소속을 onDate 부터 열고  3) users 의 지금 소속·직급을 바꾼다.
+// ends_on 당일은 옛 소속에 포함되지 않으므로 두 기간은 겹치지 않는다.
 // title 을 주지 않으면 직급은 그대로, onDate 를 주지 않으면 오늘이다.
 // 중간에 실패하면 전부 되돌리고 오류를 던진다.
 export async function transferUser(pool, { userId, departmentId, title, onDate } = {}) {
@@ -42,9 +44,8 @@ export async function transferUser(pool, { userId, departmentId, title, onDate }
     if (!open) throw new Error('열린 소속이 없습니다. 소속 이력을 먼저 확인하세요.');
     if (open.starts_later) throw new Error('지금 소속의 시작일보다 앞선 날짜로는 옮길 수 없습니다.');
 
-    // 전날로 닫는다. 단, 시작한 바로 그날 옮기면 전날이 시작일보다 앞서므로 그날로 닫는다.
-    await client.query(
-      `UPDATE org_assignments SET ends_on = GREATEST(starts_on, $2::date - 1) WHERE id = $1`, [open.id, day]);
+    // 옮기는 날로 닫는다. 시작한 바로 그날 옮기면 ends_on = starts_on 인 길이 0 의 줄이 남는다.
+    await client.query('UPDATE org_assignments SET ends_on = $2::date WHERE id = $1', [open.id, day]);
     await client.query(
       `INSERT INTO org_assignments(user_id, department_id, title, starts_on) VALUES ($1, $2, $3, $4::date)`,
       [user.id, dept.id, newTitle, day]);
