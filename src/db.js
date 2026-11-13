@@ -14,3 +14,19 @@ export function createPool(url = process.env.DATABASE_URL) {
   if (!url) throw new Error('DATABASE_URL 이 없습니다. .env.example 을 .env 로 복사해 고치세요.');
   return new pg.Pool({ connectionString: url, max: 5 });
 }
+
+// 한 트랜잭션으로 묶어 실행한다. fn 이 오류를 던지면 전부 되돌리고 그 오류를 다시 던진다.
+export async function withTransaction(pool, fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const out = await fn(client);
+    await client.query('COMMIT');
+    return out;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}

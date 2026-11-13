@@ -1,5 +1,7 @@
 import express from 'express';
 import { verifyPassword, createSession, destroySession, requireLogin } from '../auth.js';
+import { withTransaction } from '../db.js';
+import { record } from '../audit.js';
 import { layout, esc } from '../views.js';
 
 export function homeRoutes(pool) {
@@ -15,8 +17,16 @@ export function homeRoutes(pool) {
     const { rows } = await pool.query('SELECT id, password_hash, status FROM users WHERE username = $1', [username]);
     // 퇴사한 사람은 비밀번호가 맞아도 들여보내지 않는다. 응답은 비밀번호가 틀렸을 때와 같다 (퇴사 여부를 알려 주지 않는다).
     const ok = rows[0] && await verifyPassword(password, rows[0].password_hash) && rows[0].status === 'active';
-    if (!ok) return res.status(401).send(loginPage(req, '아이디 또는 비밀번호가 맞지 않습니다.', username));
-    await createSession(pool, res, rows[0].id);
+    if (!ok) {
+      // 실패 기록에는 누구인지 남기지 않는다 (적어 넣은 아이디도, 그 아이디가 실제로 있는지도).
+      await record(pool, req, { action: 'login.fail', result: 'denied', actorId: null });
+      return res.status(401).send(loginPage(req, '아이디 또는 비밀번호가 맞지 않습니다.', username));
+    }
+    // 세션을 만드는 것과 기록을 한 트랜잭션에 넣는다. 아직 req.user 가 없으므로 누구인지는 직접 준다.
+    await withTransaction(pool, async (client) => {
+      await createSession(client, res, rows[0].id);
+      await record(client, req, { action: 'login.ok', resourceType: 'user', resourceId: rows[0].id, result: 'ok', actorId: rows[0].id });
+    });
     res.redirect('/');
   });
 
@@ -59,7 +69,7 @@ ${error ? `<p class="error">${esc(error)}</p>` : ''}
 <label>아이디 <input name="username" value="${esc(username)}" autofocus required></label>
 <label>비밀번호 <input name="password" type="password" required></label>
 <button class="primary">로그인</button>
-<p class="hint">예제 계정: kim, lee, park, jung, choi · 비밀번호 pass1234</p>
+<p class="hint">예제 계정: kim, lee, park, jung, choi, han · 비밀번호 pass1234</p>
 </form>`,
   });
 }

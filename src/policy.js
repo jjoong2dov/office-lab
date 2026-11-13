@@ -21,3 +21,9 @@ export function canAttachToPost(user, post) {
 export function canManageUsers(user) {
   return Boolean(user && Array.isArray(user.roles) && user.roles.includes('system_admin'));
 }
+
+// 기록(감사 기록) 화면을 볼 수 있는가. roles 에 auditor 가 있을 때만 true.
+// system_admin 과는 따로다 — 시스템 관리자라고 기록을 볼 수 없다.
+export function canReadAudit(user) {
+  return Boolean(user && Array.isArray(user.roles) && user.roles.includes('auditor'));
+}

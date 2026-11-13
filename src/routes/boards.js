@@ -1,7 +1,10 @@
 // 부서 게시판. 여섯 경로 모두 서버에서 canReadBoard() 를 거친다. (첨부 올리기·내려받기는 routes/files.js)
+// 글 목록·내보내기·글 저장·글 상세는 허용된 것도 거부된 것도 기록한다 (audit.js). 기록에 제목·본문은 넣지 않는다.
 import express from 'express';
 import { requireLogin } from '../auth.js';
 import { canReadBoard, canAttachToPost } from '../policy.js';
+import { withTransaction } from '../db.js';
+import { record } from '../audit.js';
 import { layout, esc, fmtDate, fmtSize, csrfField, notFound } from '../views.js';
 import { contentDisposition, FILE_MAX_BYTES } from './files.js';
 
@@ -27,11 +30,18 @@ export function boardRoutes(pool) {
   const r = express.Router();
 
   // 볼 수 있는 게시판만 돌려준다. 없거나 볼 수 없으면 null — 둘을 구분하지 않는다.
-  async function findBoard(user, rawId) {
+  // deniedAction 을 주면, 게시판이 실제로 있는데 볼 수 없을 때 그 이름으로 거부를 기록한다 (없는 게시판은 기록하지 않는다).
+  async function findBoard(req, rawId, deniedAction) {
     const id = parseId(rawId);
     if (id === null) return null;
     const { rows } = await pool.query('SELECT id, name, department_id FROM boards WHERE id = $1', [id]);
-    return rows[0] && canReadBoard(user, rows[0]) ? rows[0] : null;
+    const board = rows[0];
+    if (!board) return null;
+    if (canReadBoard(req.user, board)) return board;
+    if (deniedAction) {
+      await record(pool, req, { action: deniedAction, resourceType: 'board', resourceId: board.id, result: 'denied' });
+    }
+    return null;
   }
 
   // 내가 볼 수 있는 게시판 목록
@@ -55,8 +65,9 @@ ${boards.map((b) => `<tr><td><a href="/boards/${b.id}">${esc(b.name)}</a></td>
 
   // 글 목록. 작성자 소속·직급은 글에 남긴 값(쓴 당시)으로 보여 준다.
   r.get('/boards/:id', requireLogin, async (req, res) => {
-    const board = await findBoard(req.user, req.params.id);
+    const board = await findBoard(req, req.params.id, 'board.read');
     if (!board) return notFound(req, res);
+    await record(pool, req, { action: 'board.read', resourceType: 'board', resourceId: board.id, result: 'ok' });
     const { rows } = await pool.query(
       `SELECT p.id, p.title, p.created_at, u.display_name, u.status AS author_status, p.author_title, p.author_department_name
          FROM posts p JOIN users u ON u.id = p.author_id
@@ -76,8 +87,9 @@ ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>
   // 글 목록을 CSV 로 내보낸다. 목록 화면과 같은 권한(findBoard)을 거친다 — 볼 수 없는 게시판은 404.
   // 날짜는 DB 에서 한국 시간 글자로 받는다. 맨 앞의 BOM 은 엑셀이 한글을 UTF-8 로 읽게 한다.
   r.get('/boards/:id/export.csv', requireLogin, async (req, res) => {
-    const board = await findBoard(req.user, req.params.id);
+    const board = await findBoard(req, req.params.id, 'board.export');
     if (!board) return notFound(req, res);
+    await record(pool, req, { action: 'board.export', resourceType: 'board', resourceId: board.id, result: 'ok' });
     const { rows } = await pool.query(
       `SELECT p.id, p.title, u.display_name, p.author_title, p.author_department_name,
               to_char(p.created_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI') AS created_at
@@ -97,14 +109,14 @@ ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>
 
   // 글쓰기 화면
   r.get('/boards/:id/new', requireLogin, async (req, res) => {
-    const board = await findBoard(req.user, req.params.id);
+    const board = await findBoard(req, req.params.id);
     if (!board) return notFound(req, res);
     res.send(writePage(req, board));
   });
 
   // 글 저장. 권한을 먼저 보고, 그다음에 입력을 본다 (볼 수 없는 게시판은 입력이 어떻든 404).
   r.post('/boards/:id/posts', requireLogin, async (req, res) => {
-    const board = await findBoard(req.user, req.params.id);
+    const board = await findBoard(req, req.params.id, 'post.create');
     if (!board) return notFound(req, res);
     const title = String(req.body?.title ?? '').trim();
     const body = String(req.body?.body ?? '').replace(/\r\n/g, '\n').trim();
@@ -113,14 +125,19 @@ ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>
     else if (len(body) < 1 || len(body) > BODY_MAX) error = `본문은 1~${BODY_MAX}자로 적어 주세요.`;
     if (error) return res.status(400).send(writePage(req, board, { error, title, body }));
     // 소속·직급은 저장하는 순간의 값을 글에 남긴다. 나중에 부서를 옮겨도 이 값은 바뀌지 않는다.
-    const { rows } = await pool.query(
-      `INSERT INTO posts(board_id, author_id, title, body, author_department_name, author_title)
-       SELECT $1, u.id, $3, $4, d.name, u.title
-         FROM users u JOIN departments d ON d.id = u.department_id
-        WHERE u.id = $2
-       RETURNING id`,
-      [board.id, req.user.id, title, body]);
-    res.redirect(`/posts/${rows[0].id}`);
+    // 글과 기록을 한 트랜잭션에 넣는다. 글 저장이 되돌려지면 기록도 남지 않는다.
+    const postId = await withTransaction(pool, async (client) => {
+      const { rows } = await client.query(
+        `INSERT INTO posts(board_id, author_id, title, body, author_department_name, author_title)
+         SELECT $1, u.id, $3, $4, d.name, u.title
+           FROM users u JOIN departments d ON d.id = u.department_id
+          WHERE u.id = $2
+         RETURNING id`,
+        [board.id, req.user.id, title, body]);
+      await record(client, req, { action: 'post.create', resourceType: 'post', resourceId: rows[0].id, result: 'ok' });
+      return rows[0].id;
+    });
+    res.redirect(`/posts/${postId}`);
   });
 
   // 글 상세. 없는 글과 볼 수 없는 글은 같은 404 로 답한다.
@@ -134,7 +151,13 @@ ${rows.map((p) => `<tr><td><a href="/posts/${p.id}">${esc(p.title)}</a></td><td>
          JOIN users u ON u.id = p.author_id
         WHERE p.id = $1`, [id]);
     const p = rows[0];
-    if (!p || !canReadBoard(req.user, { id: p.board_id, department_id: p.department_id })) return notFound(req, res);
+    if (!p) return notFound(req, res);
+    // 글이 실제로 있는데 볼 수 없을 때만 거부로 기록한다. 응답은 없는 글과 똑같은 404 다.
+    if (!canReadBoard(req.user, { id: p.board_id, department_id: p.department_id })) {
+      await record(pool, req, { action: 'post.read', resourceType: 'post', resourceId: p.id, result: 'denied' });
+      return notFound(req, res);
+    }
+    await record(pool, req, { action: 'post.read', resourceType: 'post', resourceId: p.id, result: 'ok' });
     // 첨부 목록. 내려받기 주소는 첨부 번호로만 만든다 (저장 이름은 화면에 내보내지 않는다).
     const { rows: files } = await pool.query(
       'SELECT id, original_name, size_bytes FROM attachments WHERE post_id = $1 ORDER BY id', [p.id]);

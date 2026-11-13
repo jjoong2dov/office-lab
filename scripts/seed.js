@@ -13,11 +13,14 @@ export const USERS = [
   ['park', '박서준', '팀장', '개발팀'],
   ['jung', '정유나', '사원', '개발팀'],
   ['choi', '최지우', '과장', '경영지원팀'],
+  ['han', '한지민', '사원', '경영지원팀'],   // 감사 담당
 ];
 
 // 역할: username, 역할 이름. 시스템 관리자는 계정·조직만 관리한다 (다른 부서 글은 못 본다).
+// 감사 담당(auditor)은 기록 화면만 더 본다. 시스템 관리자와 따로다 — 시스템 관리자라고 기록을 볼 수 없다.
 export const ROLES = [
   ['choi', 'system_admin'],
+  ['han', 'auditor'],
 ];
 
 export const ALL_BOARD = '전사 공지';   // department_id 가 NULL 인, 전 직원이 보는 게시판

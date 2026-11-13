@@ -1,5 +1,6 @@
 // 첨부 파일. 올리기와 내려받기 두 경로뿐이고, 둘 다 그 글의 게시판으로 canReadBoard() 를 거친다.
 // 파일은 filesDir 에 서버가 만든 이름(UUID)으로 두고, 받는 길은 내려받기 주소 하나뿐이다.
+// 올리기·내려받기는 허용된 것도 거부된 것도 기록한다 (audit.js). 기록에 파일 이름은 넣지 않는다.
 import express from 'express';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -7,6 +8,8 @@ import path from 'node:path';
 import multer from 'multer';
 import { requireLogin, csrfOk, CSRF_MESSAGE } from '../auth.js';
 import { canReadBoard, canAttachToPost } from '../policy.js';
+import { withTransaction } from '../db.js';
+import { record } from '../audit.js';
 import { layout, esc, notFound } from '../views.js';
 
 export const FILE_MAX_BYTES = 5 * 1024 * 1024;
@@ -68,8 +71,17 @@ export function fileRoutes(pool, filesDir) {
            FROM posts p JOIN boards b ON b.id = p.board_id
           WHERE p.id = $1`, [id]);
       const p = rows[0];
-      if (!p || !canReadBoard(req.user, { id: p.board_id, department_id: p.department_id })) return notFound(req, res);
-      if (!canAttachToPost(req.user, p)) return res.status(403).send('글쓴이만 파일을 붙일 수 있습니다.');
+      if (!p) return notFound(req, res);
+      // 거부(볼 수 없는 글 404, 글쓴이가 아님 403)는 그 글을 대상으로 기록한다. 없는 글은 기록하지 않는다.
+      const denied = () => record(pool, req, { action: 'attachment.create', resourceType: 'post', resourceId: p.id, result: 'denied' });
+      if (!canReadBoard(req.user, { id: p.board_id, department_id: p.department_id })) {
+        await denied();
+        return notFound(req, res);
+      }
+      if (!canAttachToPost(req.user, p)) {
+        await denied();
+        return res.status(403).send('글쓴이만 파일을 붙일 수 있습니다.');
+      }
       req.post = p;
       next();
     },
@@ -91,10 +103,15 @@ export function fileRoutes(pool, filesDir) {
       }
       if (!req.file) return fail(req, res, 400, '올릴 파일을 골라 주세요.', req.post.id);
       try {
-        await pool.query(
-          `INSERT INTO attachments(post_id, storage_key, original_name, size_bytes, content_type)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [req.post.id, req.file.filename, cleanName(req.file.originalname), req.file.size, cleanType(req.file.mimetype)]);
+        // 첨부 줄과 기록을 한 트랜잭션에 넣는다. 기록의 대상은 새로 생긴 첨부 번호다.
+        await withTransaction(pool, async (client) => {
+          const { rows } = await client.query(
+            `INSERT INTO attachments(post_id, storage_key, original_name, size_bytes, content_type)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id`,
+            [req.post.id, req.file.filename, cleanName(req.file.originalname), req.file.size, cleanType(req.file.mimetype)]);
+          await record(client, req, { action: 'attachment.create', resourceType: 'attachment', resourceId: rows[0].id, result: 'ok' });
+        });
       } catch (e) {
         await removeFile(req.file);   // DB 에 남지 않은 파일은 디스크에도 남기지 않는다
         throw e;
@@ -107,16 +124,23 @@ export function fileRoutes(pool, filesDir) {
     const id = parseId(req.params.id);
     if (id === null) return notFound(req, res);
     const { rows } = await pool.query(
-      `SELECT a.storage_key, a.original_name, a.content_type, b.id AS board_id, b.department_id
+      `SELECT a.id, a.storage_key, a.original_name, a.content_type, b.id AS board_id, b.department_id
          FROM attachments a JOIN posts p ON p.id = a.post_id
          JOIN boards b ON b.id = p.board_id
         WHERE a.id = $1`, [id]);
     const a = rows[0];
-    if (!a || !canReadBoard(req.user, { id: a.board_id, department_id: a.department_id })) return notFound(req, res);
+    if (!a) return notFound(req, res);
+    // 첨부가 실제로 있는데 볼 수 없을 때만 거부로 기록한다.
+    if (!canReadBoard(req.user, { id: a.board_id, department_id: a.department_id })) {
+      await record(pool, req, { action: 'attachment.download', resourceType: 'attachment', resourceId: a.id, result: 'denied' });
+      return notFound(req, res);
+    }
     // 경로는 DB 의 storage_key(UUID)로만 만든다.
     const file = path.join(filesDir, a.storage_key);
     const stat = await fs.promises.stat(file).catch(() => null);
     if (!stat || !stat.isFile()) return notFound(req, res);
+    // 보내기 직전에 기록한다 (디스크에 파일이 없어 보내지 못한 것은 내려받기로 치지 않는다).
+    await record(pool, req, { action: 'attachment.download', resourceType: 'attachment', resourceId: a.id, result: 'ok' });
     res.set({
       'Content-Type': a.content_type,
       'Content-Length': String(stat.size),

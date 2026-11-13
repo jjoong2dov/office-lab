@@ -1,14 +1,18 @@
 // 관리 화면: 직원 목록, 부서 이동, 퇴사 처리.
 // 모든 경로가 서버에서 canManageUsers() 를 거친다. 아니면 없는 주소와 같은 404 로 답한다.
 // 여기서 주는 것은 계정·조직 관리뿐이다. 게시판 열람은 여전히 canReadBoard 가 정한다.
+// 부서 이동·퇴사 처리의 ok 기록은 org.js 가 변경과 같은 트랜잭션에서 남긴다. 관리자가 아닌 사람의 시도는 여기서 denied 로 남긴다.
 import express from 'express';
 import { requireLogin } from '../auth.js';
 import { canManageUsers } from '../policy.js';
 import { transferUser, offboardUser } from '../org.js';
+import { record } from '../audit.js';
 import { layout, esc, csrfField, notFound } from '../views.js';
 
 const TITLE_MAX = 50;
-const ROLE_LABELS = { system_admin: '시스템 관리자' };
+const ROLE_LABELS = { system_admin: '시스템 관리자', auditor: '감사 담당' };
+// 변경을 하는 두 주소 (/admin 뒤쪽). 관리자가 아닌 사람의 시도를 기록할 때 쓴다.
+const CHANGE_PATH = /^\/users\/(\d{1,15})\/(transfer|offboard)\/?$/i;
 
 // 주소의 id 는 숫자만 받는다. 아니면 null (→ 404).
 const parseId = (v) => (/^\d{1,15}$/.test(String(v)) ? Number(v) : null);
@@ -20,7 +24,20 @@ export function adminRoutes(pool) {
   const r = express.Router();
 
   // /admin 아래는 전부 여기서 먼저 걸러진다. 로그인하지 않았으면 로그인 화면으로, 관리자가 아니면 404.
-  r.use('/admin', requireLogin, (req, res, next) => (canManageUsers(req.user) ? next() : notFound(req, res)));
+  // 관리자가 아닌 사람이 부서 이동·퇴사 처리를 시도했으면 denied 로 기록한다 (그 사람이 실제로 있을 때만).
+  r.use('/admin', requireLogin, async (req, res, next) => {
+    if (canManageUsers(req.user)) return next();
+    const m = req.method === 'POST' ? req.path.match(CHANGE_PATH) : null;
+    if (m) {
+      const { rows } = await pool.query('SELECT id FROM users WHERE id = $1', [Number(m[1])]);
+      if (rows[0]) {
+        await record(pool, req, {
+          action: `user.${m[2].toLowerCase()}`, resourceType: 'user', resourceId: rows[0].id, result: 'denied',
+        });
+      }
+    }
+    notFound(req, res);
+  });
 
   // 한 사람과 화면에 필요한 것(소속 이력, 부서 목록)을 읽는다. 없으면 null.
   async function findUser(rawId) {
@@ -123,7 +140,7 @@ ${rows.map((u) => `<tr><td><a href="/admin/users/${u.id}">${esc(u.display_name)}
       const departmentId = parseId(form.department_id);
       if (departmentId === null) throw new Error('부서를 골라 주세요.');
       if (len(form.title) > TITLE_MAX) throw new Error(`직급은 ${TITLE_MAX}자까지 적을 수 있습니다.`);
-      await transferUser(pool, { userId: user.id, departmentId, title: form.title === '' ? undefined : form.title });
+      await transferUser(pool, { userId: user.id, departmentId, title: form.title === '' ? undefined : form.title, req });
     } catch (e) {
       return fail(req, res, user, e, form);
     }
@@ -136,7 +153,7 @@ ${rows.map((u) => `<tr><td><a href="/admin/users/${u.id}">${esc(u.display_name)}
     if (!user) return notFound(req, res);
     try {
       if (Number(user.id) === req.user.id) throw new Error('자기 자신은 퇴사 처리할 수 없습니다.');
-      await offboardUser(pool, { userId: user.id });
+      await offboardUser(pool, { userId: user.id, req });
     } catch (e) {
       return fail(req, res, user, e);
     }

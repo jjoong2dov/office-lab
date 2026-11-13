@@ -4,10 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadUser, checkCsrf, isMultipart, CSRF_MESSAGE } from './auth.js';
 import { notFound } from './views.js';
+import { requestId } from './audit.js';
 import { homeRoutes } from './routes/home.js';
 import { boardRoutes } from './routes/boards.js';
 import { adminRoutes } from './routes/admin.js';
 import { fileRoutes, UPLOAD_PATH } from './routes/files.js';
+import { auditRoutes } from './routes/audit.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -27,6 +29,7 @@ export function createApp(pool, { filesDir } = {}) {
   const dir = prepareFilesDir(filesDir);
   const app = express();
   app.disable('x-powered-by');
+  app.use(requestId);   // 요청마다 번호를 붙인다. 기록(audit_events)의 request_id 가 된다.
   app.use(express.static(path.join(root, 'public')));
   app.use(express.urlencoded({ extended: false, limit: '200kb' }));
   app.use(loadUser(pool));
@@ -44,6 +47,7 @@ export function createApp(pool, { filesDir } = {}) {
   app.use(boardRoutes(pool));
   app.use(adminRoutes(pool));
   app.use(fileRoutes(pool, dir));
+  app.use(auditRoutes(pool));
 
   app.use((req, res) => (req.user ? notFound(req, res) : res.redirect('/login')));
   app.use((err, req, res, next) => {   // eslint-disable-line no-unused-vars
