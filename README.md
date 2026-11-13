@@ -36,6 +36,7 @@ npm run check               # 확인 스크립트. 전부 통과하면 맞게 �
 | 2 | 부서 이동: 지난 글에는 쓴 당시의 소속이 남는다 | `prompts/ep02.md` | `checks/ep02-transfer.test.js` |
 | 3 | 퇴사 처리: 열린 로그인까지 끊고, 작성 기록은 남긴다 | `prompts/ep03.md` | `checks/ep03-offboard.test.js` |
 | 4 | 관리 화면: 시스템 관리자와 문서 열람 권한을 나눈다 | `prompts/ep04.md` | `checks/ep04-admin.test.js` |
+| 5 | 첨부와 내보내기: 글을 볼 수 없으면 파일도 받을 수 없다 | `prompts/ep05.md` | `checks/ep05-files.test.js` |
 
 ## 구조
 
