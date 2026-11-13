@@ -8,3 +8,9 @@ export function canReadBoard(user, board) {
   // pg 는 bigint 를 문자열로 돌려주므로 숫자로 맞춰 비교한다.
   return Number(board.department_id) === Number(user.departmentId);
 }
+
+// 계정·조직을 관리할 수 있는가 (관리 화면: 부서 이동, 퇴사 처리).
+// roles 에 system_admin 이 있을 때만 true. 이 역할이 주는 것은 이것 하나뿐이다 — 게시판 열람은 위의 canReadBoard 가 따로 정한다.
+export function canManageUsers(user) {
+  return Boolean(user && Array.isArray(user.roles) && user.roles.includes('system_admin'));
+}

@@ -47,6 +47,7 @@ export async function destroySession(pool, req, res) {
 
 // 요청마다 쿠키 → 세션 → 사용자를 DB 에서 다시 읽는다.
 // 퇴사한 사람(status 가 active 가 아님)은 세션 행이 남아 있어도 로그인한 사람으로 취급하지 않는다.
+// 역할(roles)도 요청마다 다시 읽는다. 역할을 빼면 다시 로그인하지 않아도 다음 요청부터 바로 막힌다.
 export function loadUser(pool) {
   return async (req, res, next) => {
     req.user = null;
@@ -55,7 +56,8 @@ export function loadUser(pool) {
     if (token) {
       const { rows } = await pool.query(
         `SELECT u.id, u.username, u.display_name, u.title, u.department_id,
-                d.name AS department_name, s.csrf_token
+                d.name AS department_name, s.csrf_token,
+                ARRAY(SELECT role FROM user_roles WHERE user_id = u.id ORDER BY role) AS roles
            FROM sessions s
            JOIN users u ON u.id = s.user_id
            JOIN departments d ON d.id = u.department_id
@@ -67,6 +69,7 @@ export function loadUser(pool) {
         req.user = {
           id: Number(r.id), username: r.username, displayName: r.display_name, title: r.title,
           departmentId: Number(r.department_id), departmentName: r.department_name,
+          roles: r.roles,
         };
         req.csrf = r.csrf_token;
       }

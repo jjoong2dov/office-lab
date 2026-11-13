@@ -15,6 +15,11 @@ export const USERS = [
   ['choi', '최지우', '과장', '경영지원팀'],
 ];
 
+// 역할: username, 역할 이름. 시스템 관리자는 계정·조직만 관리한다 (다른 부서 글은 못 본다).
+export const ROLES = [
+  ['choi', 'system_admin'],
+];
+
 export const ALL_BOARD = '전사 공지';   // department_id 가 NULL 인, 전 직원이 보는 게시판
 export const POSTS = [
   // 게시판, 작성자 username, 제목, 본문
@@ -43,6 +48,13 @@ export async function seed(pool) {
        INSERT INTO org_assignments(user_id, department_id, title, starts_on)
        SELECT id, department_id, title, created_at::date FROM u`,
       [username, displayName, title, hash, dept],
+    );
+  }
+  for (const [username, role] of ROLES) {
+    await pool.query(
+      `INSERT INTO user_roles(user_id, role) SELECT id, $2 FROM users WHERE username = $1
+       ON CONFLICT (user_id, role) DO NOTHING`,
+      [username, role],
     );
   }
   // 게시판: 전사 공지 하나, 부서마다 하나
