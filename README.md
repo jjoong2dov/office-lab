@@ -40,6 +40,7 @@ npm run check               # 확인 스크립트. 전부 통과하면 맞게 �
 | 5 | 첨부와 내보내기: 글을 볼 수 없으면 파일도 받을 수 없다 | `prompts/ep05.md` | `checks/ep05-files.test.js` |
 | 6 | 열람·변경 기록: 거부된 시도까지 남기고, 내용은 남기지 않는다 | `prompts/ep06.md` | `checks/ep06-audit.test.js` |
 | 7 | 백업과 복원: 다른 DB 에 복원하고 원본과 대조한다 | `prompts/ep07.md` | `checks/ep07-backup.test.js` |
+| 8 | 승인 요청: 요청부터 승인·반려까지, 동시에 와도 하나만 | `prompts/ep08.md` | `checks/ep08-requests.test.js` |
 
 ## 구조
 
