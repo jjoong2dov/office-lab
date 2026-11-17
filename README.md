@@ -1,6 +1,9 @@
 # office-lab — 가상 회사 '예제상사'의 사내 시스템
 
 영상 시리즈 **AI로 사내 시스템 만들기**의 실습 코드다. 매 편 이 시스템으로 할 수 있는 업무가 하나씩 늘어난다.
+
+> ▶ **영상으로 보기: [YouTube 재생목록 「AI로 사내 시스템 만들기」](https://www.youtube.com/playlist?list=PLXDapDlSOTC8)** — 편마다 무엇을 정해야 하는지, AI에게 준 지시문, 확인 과정을 4~5분에 보여 준다. 2026-11-23부터 공개 중.
+
 회사 이름·직원·글은 모두 지어낸 것이고, 코드는 이 시리즈를 위해 새로 썼다.
 
 ## 이 저장소로 할 수 있는 것
@@ -39,16 +42,16 @@ npm install && npm run db:reset
 npm run check               # 확인 스크립트. 전부 통과하면 맞게 만든 것이다
 ```
 
-| 편 | 만드는 것 | 지시문 | 확인 |
-|---|---|---|---|
-| 1 | 부서 게시판: 다른 부서 글은 목록에도, 직접 주소로도 안 보인다 | `prompts/ep01.md` | `checks/ep01-board.test.js` |
-| 2 | 부서 이동: 지난 글에는 쓴 당시의 소속이 남는다 | `prompts/ep02.md` | `checks/ep02-transfer.test.js` |
-| 3 | 퇴사 처리: 열린 로그인까지 끊고, 작성 기록은 남긴다 | `prompts/ep03.md` | `checks/ep03-offboard.test.js` |
-| 4 | 관리 화면: 시스템 관리자와 문서 열람 권한을 나눈다 | `prompts/ep04.md` | `checks/ep04-admin.test.js` |
-| 5 | 첨부와 내보내기: 글을 볼 수 없으면 파일도 받을 수 없다 | `prompts/ep05.md` | `checks/ep05-files.test.js` |
-| 6 | 열람·변경 기록: 거부된 시도까지 남기고, 내용은 남기지 않는다 | `prompts/ep06.md` | `checks/ep06-audit.test.js` |
-| 7 | 백업과 복원: 다른 DB 에 복원하고 원본과 대조한다 | `prompts/ep07.md` | `checks/ep07-backup.test.js` |
-| 8 | 승인 요청: 요청부터 승인·반려까지, 동시에 와도 하나만 | `prompts/ep08.md` | `checks/ep08-requests.test.js` |
+| 편 | 만드는 것 | 지시문 | 확인 | 영상 |
+|---|---|---|---|---|
+| 1 | 부서 게시판: 다른 부서 글은 목록에도, 직접 주소로도 안 보인다 | `prompts/ep01.md` | `checks/ep01-board.test.js` | [보기](https://youtu.be/3ZjtOAxnpKI) (11/23) |
+| 2 | 부서 이동: 지난 글에는 쓴 당시의 소속이 남는다 | `prompts/ep02.md` | `checks/ep02-transfer.test.js` | [보기](https://youtu.be/zNabsI4rkmY) (11/27) |
+| 3 | 퇴사 처리: 열린 로그인까지 끊고, 작성 기록은 남긴다 | `prompts/ep03.md` | `checks/ep03-offboard.test.js` | [보기](https://youtu.be/UtDUzJLFAmw) (12/03) |
+| 4 | 관리 화면: 시스템 관리자와 문서 열람 권한을 나눈다 | `prompts/ep04.md` | `checks/ep04-admin.test.js` | [보기](https://youtu.be/PeOUA8QGLjw) (12/09) |
+| 5 | 첨부와 내보내기: 글을 볼 수 없으면 파일도 받을 수 없다 | `prompts/ep05.md` | `checks/ep05-files.test.js` | 12/15 공개 |
+| 6 | 열람·변경 기록: 거부된 시도까지 남기고, 내용은 남기지 않는다 | `prompts/ep06.md` | `checks/ep06-audit.test.js` | [보기](https://youtu.be/BvPBZ5By-vw) (12/21) |
+| 7 | 백업과 복원: 다른 DB 에 복원하고 원본과 대조한다 | `prompts/ep07.md` | `checks/ep07-backup.test.js` | [보기](https://youtu.be/z_oJB6PgvfQ) (12/25) |
+| 8 | 승인 요청: 요청부터 승인·반려까지, 동시에 와도 하나만 | `prompts/ep08.md` | `checks/ep08-requests.test.js` | 12/31 공개 |
 
 ## 구조
 
